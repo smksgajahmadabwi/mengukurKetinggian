@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pengukur Tinggi dari Kamera</title>
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; }
+    video, canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 10px;
+      font-family: sans-serif;
+      z-index: 2;
+      max-width: 360px;
+      text-align: center;
+      font-size: 14px;
+    }
+    #info h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+    #info h3 {
+      margin: 0;
+      font-size: 12px;
+    }
+	#info h4 {
+      margin: 0 0 10px;
+      font-size: 12px;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 10px;
+      z-index: 2;
+      font-family: sans-serif;
+    }
+    input, button {
+      margin: 4px 0;
+      padding: 4px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+
+  <div id="info">
+    <h2><center>PENERAPAN TRIGONOMETRI</center></h2>
+	<h3><center>Mengukur Tinggi Benda Dengan Camera Android</center></h3>
+	<h4><center> </center></h4>
+    <h3><center>SMK GAJAH MADA BANYUWANGI</center></h3>
+	<h3><center>oleh Ilmiyah,S.Pd</center></h3>
+	<h4><center> </center></h4>
+    <div id="steps">1) Tap 2 titik horizontal (A & B)<br>2) Masukkan panjang (cm)<br>3) Tap titik vertikal (C)</div>
+  </div>
+
+  <div id="controls">
+    <label>Referensi horizontal (cm):</label><br>
+    <input type="number" id="refLength" placeholder="Contoh: 100"><br>
+    <button id="flipCamera">Ganti Kamera</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+    const info = document.getElementById('steps');
+    const flipBtn = document.getElementById('flipCamera');
+    const resetBtn = document.getElementById('resetBtn');
+    const refInput = document.getElementById('refLength');
+
+    let facing = 'environment';
+    let stream;
+    let points = [];
+    let scale = null;
+    let draggingPoint = null;
+
+    function startCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing }
+      }).then(s => {
+        stream = s;
+        video.srcObject = s;
+      });
+    }
+
+    startCamera();
+
+    flipBtn.onclick = () => {
+      facing = (facing === 'environment') ? 'user' : 'environment';
+      startCamera();
+    };
+
+    resetBtn.onclick = () => {
+      points = [];
+      scale = null;
+      draggingPoint = null;
+      info.innerHTML = "1) Tap 2 titik horizontal (A & B)<br>2) Masukkan panjang (cm)<br>3) Tap titik vertikal (C)";
+      drawOverlay();
+    };
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      drawOverlay();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    video.addEventListener('loadedmetadata', resizeCanvas);
+
+    canvas.addEventListener('click', e => {
+      if (points.length >= 3 || draggingPoint !== null) return;
+      let p = { x: e.clientX, y: e.clientY };
+
+      if (points.length === 1) p.y = points[0].y;
+      if (points.length === 2) { p.x = points[0].x; p.y = e.clientY; }
+
+      points.push(p);
+
+      if (points.length === 2) {
+        const dx = Math.abs(points[1].x - points[0].x);
+        const refLength = parseFloat(refInput.value);
+        if (refLength && dx > 0) {
+          scale = dx / refLength;
+        }
+      }
+
+      drawOverlay();
+    });
+
+    canvas.addEventListener('mousedown', e => {
+      const mx = e.clientX, my = e.clientY;
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        if (Math.hypot(mx - p.x, my - p.y) < 10) {
+          draggingPoint = i;
+          break;
+        }
+      }
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      if (draggingPoint !== null) {
+        let x = e.clientX, y = e.clientY;
+        if (draggingPoint === 1) y = points[0].y;
+        if (draggingPoint === 2) x = points[0].x;
+        points[draggingPoint] = { x, y };
+
+        if (points.length === 2) {
+          const dx = Math.abs(points[1].x - points[0].x);
+          const refLength = parseFloat(refInput.value);
+          if (refLength && dx > 0) {
+            scale = dx / refLength;
+          }
+        }
+        drawOverlay();
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => draggingPoint = null);
+
+    function drawOverlay() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "red";
+      ctx.font = "bold 12px sans-serif";
+      points.forEach((p, i) => {
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "cyan";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText(String.fromCharCode(65 + i), p.x + 8, p.y);
+        ctx.fillStyle = "red";
+      });
+
+      if (points.length === 3 && scale) {
+        const [A, B, C] = points;
+        const distAB_px = Math.hypot(B.x - A.x, B.y - A.y);
+        const distAC_px = Math.hypot(C.x - A.x, C.y - A.y);
+        const distBC_px = Math.hypot(C.x - B.x, C.y - B.y);
+
+        const distAB_cm = distAB_px / scale;
+        const distAC_cm = distAC_px / scale;
+        const distBC_cm = distBC_px / scale;
+
+        ctx.strokeStyle = 'cyan';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(B.x, B.y); ctx.lineTo(C.x, C.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(C.x, C.y); ctx.lineTo(A.x, A.y); ctx.stroke();
+
+        const mid = (p1, p2) => ({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
+        ctx.fillStyle = 'yellow';
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText(distAB_cm.toFixed(1), mid(A, B).x, mid(A, B).y);
+        ctx.fillText(distAC_cm.toFixed(1), mid(A, C).x, mid(A, C).y);
+        ctx.fillText(distBC_cm.toFixed(1), mid(B, C).x, mid(B, C).y);
+
+        const cosABC = distAB_cm / distBC_cm;
+        const sinABC = distAC_cm / distBC_cm;
+        const tanABC = distAC_cm / distAB_cm;
+
+        const angleABC = Math.acos(cosABC) * (180 / Math.PI);
+        const angleACB = 90 - angleABC;
+
+        info.innerHTML = `
+          <u><b>Teori Trigonometri:</b></u><br>
+          Panjang AB = ${distAB_cm.toFixed(2)} cm<br>
+          Panjang AC = ${distAC_cm.toFixed(2)} cm<br>
+          Panjang BC = ${distBC_cm.toFixed(2)} cm<br><br>
+          Sudut ∠CAB = 90°<br>
+          Sudut ∠ACB = ${angleACB.toFixed(2)}°<br>
+          Sudut ∠ABC = ${angleABC.toFixed(2)}°<br><br>
+          cos(∠ABC) = AB / BC = ${cosABC.toFixed(4)}<br>
+          sin(∠ABC) = AC / BC = ${sinABC.toFixed(4)}<br>
+          tan(∠ABC) = AC / AB = ${tanABC.toFixed(4)}
+        `;
+      }
+    }
+  </script>
+</body>
+</html>
